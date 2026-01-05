@@ -1,137 +1,118 @@
 import streamlit as st
 import pandas as pd
-import json
+import gspread
+from google.oauth2.service_account import Credentials
 import os
 import google.generativeai as genai
-from datetime import datetime
+import json
 
 st.set_page_config(page_title="Min Vinkällare", page_icon="🍷", layout="wide")
 
-# --- SÄKERHET & LÖSENORD ---
-def check_password():
-    """Returnerar True om användaren har loggat in korrekt."""
-    # Om inga secrets finns (körs lokalt utan config), släpp in direkt eller använd standard
-    if "password" not in st.secrets:
-        return True
+# --- KONFIGURATION & SÄKERHET ---
+def get_google_sheet_client():
+    try:
+        # Hämtar nyckeln från Secrets
+        scope = ['https://www.googleapis.com/auth/spreadsheets']
+        creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
+        client = gspread.authorize(creds)
+        return client
+    except Exception as e:
+        return None
 
-    def password_entered():
-        if st.session_state["password"] == st.secrets["password"]:
-            st.session_state["password_correct"] = True
-            del st.session_state["password"]  # Radera lösen från minnet
-        else:
-            st.session_state["password_correct"] = False
+# AI-nyckel setup
+if "GOOGLE_API_KEY" in st.secrets:
+    os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
 
-    if "password_correct" not in st.session_state:
-        # Visa inloggning
-        st.text_input("Lösenord", type="password", on_change=password_entered, key="password")
-        return False
-    elif not st.session_state["password_correct"]:
-        # Fel lösenord
-        st.text_input("Lösenord", type="password", on_change=password_entered, key="password")
-        st.error("😕 Fel lösenord")
-        return False
-    else:
-        # Rätt lösenord
-        return True
-
-if not check_password():
-    st.stop()  # Stanna här om man inte är inloggad
-
-# --- KONFIGURATION (Hämta nyckel från Secrets) ---
-# Lokalt kan du ha kvar din nyckel i secrets.toml eller os.environ, 
-# men på webben hämtas den från st.secrets.
-try:
-    api_key = st.secrets["GOOGLE_API_KEY"]
-except:
-    api_key = "DIN_NYCKEL_HÄR_OM_DU_KÖR_LOKALT" # Fallback
-
-os.environ["GOOGLE_API_KEY"] = api_key
-
-# --- DESIGN (MOBILANPASSAD) ---
+# --- DESIGN ---
 st.markdown("""
     <style>
     .stApp { background-color: #0e1117; color: #fafafa; }
-    
-    /* Mobilvänlig meny */
     section[data-testid="stSidebar"] .stRadio div[role='radiogroup'] > label {
-        background-color: #1c1f26;
-        padding: 15px 20px;
-        border-radius: 10px;
-        margin-bottom: 8px;
-        border-left: 5px solid #2e3036;
-        transition: all 0.2s;
-        cursor: pointer;
-    }
-    section[data-testid="stSidebar"] .stRadio div[role='radiogroup'] > label:hover {
-        background-color: #2e3036;
-        border-left: 5px solid #5c1a22;
+        background-color: #1c1f26; padding: 15px 20px; border-radius: 10px; margin-bottom: 8px; border-left: 5px solid #2e3036; cursor: pointer;
     }
     section[data-testid="stSidebar"] .stRadio div[role='radiogroup'] > label[data-checked="true"] {
-        background-color: #5c1a22;
-        border-left: 5px solid #e6c200;
-        color: white;
+        background-color: #5c1a22; border-left: 5px solid #e6c200; color: white;
     }
     .stButton>button { width: 100%; border-radius: 12px; height: 3em; background-color: #5c1a22; color: white; border: none; font-weight: bold; }
-    .wine-card { padding: 15px; background-color: #1c1f26; border-radius: 12px; border-left: 4px solid #5c1a22; margin-bottom: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-    .stat-box { background-color: #1c1f26; padding: 15px; border-radius: 12px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+    .wine-card { padding: 15px; background-color: #1c1f26; border-radius: 12px; border-left: 4px solid #5c1a22; margin-bottom: 10px; }
+    .stat-box { background-color: #1c1f26; padding: 15px; border-radius: 12px; text-align: center; }
     .stat-num { font-size: 24px; font-weight: bold; color: #e6c200; }
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; flex-wrap: wrap; }
-    .stTabs [data-baseweb="tab"] { height: 50px; flex-grow: 1; text-align: center; background-color: #1c1f26; border-radius: 8px; margin-bottom: 5px; }
-    .stTabs [aria-selected="true"] { background-color: #5c1a22; color: white; }
     </style>
 """, unsafe_allow_html=True)
 
 # --- MASTER CONTEXT ---
 MASTER_CONTEXT = """
 Du är en personlig sommelier och lagerchef. 
-Användaren gillar: Nebbiolo, Barolo, Godello. Hatar: Amarone (om det inte är till gäster).
+Användaren gillar: Nebbiolo, Barolo, Godello. Hatar: Amarone.
 Husvin: Elio Altare Dolcetto.
-
-Dina uppgifter:
-1. Rekommendera BÄSTA matchningen från listan baserat på mat eller humör.
-2. VIKTIGT: Du MÅSTE tala om var flaskan ligger (Plats och Hylla). Användaren vill inte leta.
-   Exempel: "Ta fram Barolon (Vinkylen, Hylla 2). Den passar utmärkt."
-
-Svara kort, koncist och passionerat.
+VIKTIGT: Tala alltid om var flaskan ligger (Plats och Hylla).
 """
 
-# --- FUNKTIONER ---
+# --- DATAFUNKTIONER ---
 def load_data():
+    """Hämtar data från Google Sheets"""
+    client = get_google_sheet_client()
+    if not client:
+        return pd.DataFrame()
+        
     try:
-        with open('vinlagret.json', 'r', encoding='utf-8') as f:
-            df = pd.read_json(f)
-            df['argang'] = df['argang'].astype(str) 
-            return df
-    except:
-        return pd.DataFrame(columns=["id", "namn", "argang", "typ", "antal", "plats", "sektion", "hylla", "pris"])
+        sheet = client.open("Min Vinkällare").sheet1
+        data = sheet.get_all_records()
+        df = pd.DataFrame(data)
+        if not df.empty:
+            df['argang'] = df['argang'].astype(str)
+        return df
+    except Exception as e:
+        st.error(f"Kunde inte läsa Google Sheets: {e}")
+        return pd.DataFrame()
 
 def save_data(df):
-    df.to_json('vinlagret.json', orient='records', indent=4, force_ascii=False)
+    """Sparar data till Google Sheets"""
+    client = get_google_sheet_client()
+    if not client:
+        st.error("Kunde inte ansluta för att spara.")
+        return
+
+    try:
+        sheet = client.open("Min Vinkällare").sheet1
+        sheet.clear()
+        # Gspread vill ha en lista av listor
+        data_to_write = [df.columns.values.tolist()] + df.values.tolist()
+        sheet.update(range_name='A1', values=data_to_write)
+    except Exception as e:
+        st.error(f"Kunde inte spara till Google Sheets: {e}")
 
 def get_ai_response(prompt, inventory_str, is_trivia=False):
-    if "DIN_NYCKEL" in os.environ["GOOGLE_API_KEY"]:
-        return "⚠️ Ingen API-nyckel konfigurerad i Secrets."
+    if "GOOGLE_API_KEY" not in os.environ:
+        return "⚠️ Ingen API-nyckel konfigurerad."
     try:
         genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
         model = genai.GenerativeModel('gemini-2.5-flash')
         if is_trivia:
-            full_prompt = f"Du är ett strikt uppslagsverk om vin. Ge ENDAST intressant fakta (historia, druva, region) om vinet nedan. Inga åsikter om användarens smak. Max 2 meningar.\n\nVIN: {prompt}"
+            full_prompt = f"Du är ett strikt uppslagsverk om vin. Ge ENDAST intressant fakta om vinet. Inga åsikter. Max 2 meningar.\n\nVIN: {prompt}"
         else:
             full_prompt = f"{MASTER_CONTEXT}\n\nLAGER:\n{inventory_str}\n\nFRÅGA: {prompt}"
         response = model.generate_content(full_prompt)
         return response.text
     except Exception as e:
-        return f"🍷 AI:n tar en tupplur. (Fel: {str(e)})"
+        return f"🍷 AI:n sover. (Fel: {str(e)})"
 
 # --- APP START ---
-df = load_data()
+if 'df' not in st.session_state:
+    st.session_state['df'] = load_data()
+
+df = st.session_state['df']
 
 with st.sidebar:
     st.header("🍷 Vinkällaren")
     st.write("") 
     page = st.radio("Meny", ["Översikt", "Vinkylen", "Bokhyllan", "Lagerhantering", "Sommelieren"], label_visibility="collapsed")
+    st.write("---")
+    if st.button("🔄 Ladda om data"):
+        st.session_state['df'] = load_data()
+        st.rerun()
 
-# --- SIDA: ÖVERSIKT ---
+# --- SIDOR ---
 if page == "Översikt":
     st.title("Översikt")
     c1, c2 = st.columns(2)
@@ -140,10 +121,7 @@ if page == "Översikt":
         val = df['pris'].sum() if not df.empty else 0
         visnings_pris = f"{val/1000:.1f}k" if val > 10000 else f"{val:.0f}"
         st.markdown(f"<div class='stat-box'>Värde<div class='stat-num'>{visnings_pris} kr</div></div>", unsafe_allow_html=True)
-    st.write("")
-    osorterade = df[df['plats'] == 'Osorterat']['antal'].sum()
-    if osorterade > 0: st.error(f"⚠️ Du har {int(osorterade)} flaskor att sortera in!")
-    else: st.success("✅ Allt är i ordning i källaren.")
+    
     st.markdown("---")
     
     col_triv, col_btn = st.columns([3, 1])
@@ -156,20 +134,9 @@ if page == "Översikt":
             with st.spinner("Hämtar fakta..."):
                 fakta = f"{trivia_vin['namn']} ({trivia_vin['argang']})"
                 st.session_state['trivia_text'] = get_ai_response(fakta, '', is_trivia=True)
-        else: st.session_state['trivia_text'] = "Lägg in lite viner först!"
+        else: st.session_state['trivia_text'] = "Källaren verkar tom..."
     with col_triv: st.info(f"💡 **Trivia:** {st.session_state['trivia_text']}")
-    
-    st.markdown("---")
-    st.subheader("🕰️ Drickdags?")
-    if not df.empty:
-        numeric_argang = pd.to_numeric(df['argang'], errors='coerce')
-        old_wines = df[ (numeric_argang.notna()) & (numeric_argang < 2016) ]
-        if not old_wines.empty:
-            for _, row in old_wines.head(5).iterrows():
-                 st.warning(f"**{row['namn']} {row['argang']}** ({row['plats']})")
-        else: st.caption("Inga viner äldre än 2016.")
 
-# --- SIDA: VINKYLEN ---
 elif page == "Vinkylen":
     st.title("🧊 mQuvée 126")
     st.subheader("Övre Zon (8°C)")
@@ -191,7 +158,6 @@ elif page == "Vinkylen":
             for _, row in viner.iterrows():
                 st.markdown(f"<div class='wine-card'>🍷 <b>{row['namn']}</b><br><small>{row['argang']} | {row['antal']} st</small></div>", unsafe_allow_html=True)
 
-# --- SIDA: BOKHYLLAN ---
 elif page == "Bokhyllan":
     st.title("📚 Bokhyllan")
     hyllor = ["Övre", "Undre"]
@@ -203,10 +169,9 @@ elif page == "Bokhyllan":
         for _, row in viner.iterrows():
             st.markdown(f"<div class='wine-card'><b>{row['namn']}</b> {row['argang']}</div>", unsafe_allow_html=True)
 
-# --- SIDA: LAGERHANTERING ---
 elif page == "Lagerhantering":
     st.title("Lagerhantering")
-    tab_add, tab_sort, tab_edit = st.tabs(["➕ Lägg till", "📦 Sortera", "✏️ Ändra"])
+    tab_add, tab_sort, tab_edit, tab_import = st.tabs(["➕ Lägg till", "📦 Sortera", "✏️ Ändra", "📥 Importera"])
     
     with tab_add:
         st.subheader("Nytt inköp")
@@ -218,18 +183,18 @@ elif page == "Lagerhantering":
             c3, c4 = st.columns(2)
             ny_typ = c3.selectbox("Typ", ["Rött", "Vitt", "Mousserande", "Rosé", "Sött"])
             ny_pris = c4.number_input("Pris", min_value=0)
-            st.write("---")
             st.write("**Placering**")
             vald_plats = st.selectbox("Plats", ["Osorterat", "Vinkylen", "Bokhyllan"])
             vald_hylla = ""
             if vald_plats == "Vinkylen": vald_hylla = st.selectbox("Hylla", ["Hylla 1", "Hylla 2", "Hylla 3", "Hylla 4"])
             elif vald_plats == "Bokhyllan": vald_hylla = st.selectbox("Hylla", ["Övre", "Undre"])
-            st.write("")
-            submit_ny = st.form_submit_button("Spara vin")
+            submit_ny = st.form_submit_button("Spara till Google Sheets")
+
             if submit_ny and ny_namn:
                 new_id = df['id'].max() + 1 if not df.empty else 1
                 new_row = {"id": new_id, "namn": ny_namn, "argang": ny_arg, "typ": ny_typ, "antal": ny_antal, "plats": vald_plats, "sektion": "", "hylla": vald_hylla, "pris": ny_pris}
                 df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+                st.session_state['df'] = df
                 save_data(df)
                 st.success(f"✅ {ny_namn} sparad!")
                 st.rerun()
@@ -267,7 +232,6 @@ elif page == "Lagerhantering":
                 c1, c2 = st.columns(2)
                 nytt_antal = c1.number_input("Antal", value=int(df.at[idx, 'antal']))
                 ny_plats_edit = c2.text_input("Plats", df.at[idx, 'plats'])
-                st.write("")
                 col_save, col_del = st.columns(2)
                 spara = col_save.form_submit_button("Spara ändringar")
                 ta_bort = col_del.form_submit_button("🗑️ Ta bort", type="primary")
@@ -283,21 +247,32 @@ elif page == "Lagerhantering":
                     save_data(df)
                     st.success("Borta!")
                     st.rerun()
+                    
+    # HÄR ÄR DEN MAGISKA KNAPPEN
+    with tab_import:
+        st.subheader("Importera från JSON")
+        st.warning("⚠️ Detta skriver över allt i Google Sheets med innehållet i vinlagret.json!")
+        if st.button("🚀 Läs in från vinlagret.json till Sheets"):
+            try:
+                # Läser filen lokalt (från GitHub-repot)
+                with open('vinlagret.json', 'r', encoding='utf-8') as f:
+                    json_data = pd.read_json(f)
+                
+                # Sparar till Sheets
+                save_data(json_data)
+                
+                # Uppdaterar appen
+                st.session_state['df'] = json_data
+                st.success(f"Succé! {len(json_data)} viner inlästa till Google Sheets.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Kunde inte importera: {e}")
 
-# --- SIDA: SOMMELIEREN ---
 elif page == "Sommelieren":
     st.title("Din Sommelier")
-    st.write("Vad vill du dricka ikväll?")
-    c1, c2, c3 = st.columns(3)
-    if c1.button("🥩 Kött"): fraga = "Jag ska äta en rejäl köttbit. Vad i källaren passar bäst?"
-    elif c2.button("🍝 Pasta"): fraga = "Jag lagar pasta ikväll. Ge mig ett bra italienskt alternativ."
-    elif c3.button("🥂 Bubbel"): fraga = "Jag vill fira! Vilket bubbel är bäst just nu?"
-    else: fraga = None
-    user_input = st.text_input("", placeholder="Eller skriv din fråga här...")
-    if user_input: fraga = user_input
-    if fraga:
-        with st.spinner("Sommelieren letar i hyllorna..."):
+    user_input = st.text_input("Vad vill du dricka?", placeholder="Grillat kött...")
+    if user_input:
+        with st.spinner("Letar i Google Sheets..."):
             relevant_data = df[['namn', 'argang', 'antal', 'plats', 'hylla']].to_string(index=False)
-            svar = get_ai_response(fraga, relevant_data, is_trivia=False)
-            st.markdown(f"**Fråga:** {fraga}")
+            svar = get_ai_response(user_input, relevant_data, is_trivia=False)
             st.info(svar)
