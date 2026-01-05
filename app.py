@@ -8,11 +8,10 @@ import json
 
 st.set_page_config(page_title="Min Vinkällare", page_icon="🍷", layout="wide")
 
-# --- 1. SÄKERHET & LÖSENORD (TILLBAKA NU!) ---
+# --- 1. SÄKERHET & LÖSENORD ---
 def check_password():
-    """Kollar lösenordet mot Secrets"""
     if "password" not in st.secrets:
-        return True # Kör man lokalt utan lösenord släpps man in
+        return True 
 
     def password_entered():
         if st.session_state["password"] == st.secrets["password"]:
@@ -34,10 +33,14 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- 2. KONFIGURATION ---
+# --- 2. KONFIGURATION (HÄR ÄR FIXEN!) ---
 def get_google_sheet_client():
     try:
-        scope = ['https://www.googleapis.com/auth/spreadsheets']
+        # VI LÄGGER TILL 'DRIVE' I LISTAN HÄR:
+        scope = [
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/drive'
+        ]
         creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
         client = gspread.authorize(creds)
         return client
@@ -84,7 +87,6 @@ def load_data():
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
         
-        # Om tomt, returnera tom mall
         if df.empty or 'plats' not in df.columns:
             return pd.DataFrame(columns=expected_cols)
 
@@ -95,7 +97,7 @@ def load_data():
         return pd.DataFrame(columns=expected_cols)
 
 def save_data(df):
-    """Sparar data till Google Sheets (FIXAD FÖR IMPORT)"""
+    """Sparar data till Google Sheets"""
     client = get_google_sheet_client()
     if not client:
         st.error("Kunde inte ansluta till Google.")
@@ -105,8 +107,7 @@ def save_data(df):
         sheet = client.open("Min Vinkällare").sheet1
         sheet.clear()
         
-        # VIKTIGT: Fyll alla tomma värden (NaN) med tom sträng ""
-        # Annars kraschar Google-kopplingen tyst
+        # Fyll tomma värden för att undvika fel
         df_clean = df.fillna("")
         
         data_to_write = [df_clean.columns.values.tolist()] + df_clean.values.tolist()
@@ -292,7 +293,6 @@ elif page == "Lagerhantering":
                 
                 st.info(f"Hittade {len(json_data)} viner. Sparar till molnet...")
                 
-                # Här används den nya, säkrare spar-funktionen
                 if save_data(json_data):
                     st.session_state['df'] = json_data
                     st.success("Succé! Vinerna är uppladdade.")
