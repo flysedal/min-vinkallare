@@ -11,7 +11,6 @@ st.set_page_config(page_title="Min Vinkällare", page_icon="🍷", layout="wide"
 # --- KONFIGURATION & SÄKERHET ---
 def get_google_sheet_client():
     try:
-        # Hämtar nyckeln från Secrets
         scope = ['https://www.googleapis.com/auth/spreadsheets']
         creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
         client = gspread.authorize(creds)
@@ -19,7 +18,6 @@ def get_google_sheet_client():
     except Exception as e:
         return None
 
-# AI-nyckel setup
 if "GOOGLE_API_KEY" in st.secrets:
     os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
 
@@ -50,21 +48,29 @@ VIKTIGT: Tala alltid om var flaskan ligger (Plats och Hylla).
 
 # --- DATAFUNKTIONER ---
 def load_data():
-    """Hämtar data från Google Sheets"""
+    """Hämtar data från Google Sheets - MED KROCKSKYDD FÖR TOMMA ARK"""
+    # Vi definierar vilka kolumner vi FÖRVÄNTAR oss ska finnas
+    expected_cols = ["id", "namn", "argang", "typ", "antal", "plats", "sektion", "hylla", "pris"]
+    
     client = get_google_sheet_client()
     if not client:
-        return pd.DataFrame()
+        return pd.DataFrame(columns=expected_cols)
         
     try:
         sheet = client.open("Min Vinkällare").sheet1
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
+        
+        # HÄR ÄR FIXEN: Om arket är tomt eller saknar kolumner -> Returnera tom mall
+        if df.empty or 'plats' not in df.columns:
+            return pd.DataFrame(columns=expected_cols)
+
         if not df.empty:
             df['argang'] = df['argang'].astype(str)
         return df
     except Exception as e:
-        st.error(f"Kunde inte läsa Google Sheets: {e}")
-        return pd.DataFrame()
+        # Om något går fel, returnera en tom lista så appen inte kraschar
+        return pd.DataFrame(columns=expected_cols)
 
 def save_data(df):
     """Sparar data till Google Sheets"""
@@ -76,7 +82,6 @@ def save_data(df):
     try:
         sheet = client.open("Min Vinkällare").sheet1
         sheet.clear()
-        # Gspread vill ha en lista av listor
         data_to_write = [df.columns.values.tolist()] + df.values.tolist()
         sheet.update(range_name='A1', values=data_to_write)
     except Exception as e:
@@ -248,20 +253,15 @@ elif page == "Lagerhantering":
                     st.success("Borta!")
                     st.rerun()
                     
-    # HÄR ÄR DEN MAGISKA KNAPPEN
+    # KNAPPEN
     with tab_import:
         st.subheader("Importera från JSON")
         st.warning("⚠️ Detta skriver över allt i Google Sheets med innehållet i vinlagret.json!")
         if st.button("🚀 Läs in från vinlagret.json till Sheets"):
             try:
-                # Läser filen lokalt (från GitHub-repot)
                 with open('vinlagret.json', 'r', encoding='utf-8') as f:
                     json_data = pd.read_json(f)
-                
-                # Sparar till Sheets
                 save_data(json_data)
-                
-                # Uppdaterar appen
                 st.session_state['df'] = json_data
                 st.success(f"Succé! {len(json_data)} viner inlästa till Google Sheets.")
                 st.rerun()
