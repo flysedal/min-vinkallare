@@ -33,10 +33,9 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- 2. KONFIGURATION (HÄR ÄR FIXEN!) ---
+# --- 2. KONFIGURATION ---
 def get_google_sheet_client():
     try:
-        # VI LÄGGER TILL 'DRIVE' I LISTAN HÄR:
         scope = [
             'https://www.googleapis.com/auth/spreadsheets',
             'https://www.googleapis.com/auth/drive'
@@ -50,20 +49,133 @@ def get_google_sheet_client():
 if "GOOGLE_API_KEY" in st.secrets:
     os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
 
-# --- 3. DESIGN ---
+# --- 3. DESIGN: MODERN SOMMELIER (LJUS & ELEGANT) ---
 st.markdown("""
     <style>
-    .stApp { background-color: #0e1117; color: #fafafa; }
+    /* Huvudbakgrund - Ljus och fräsch */
+    .stApp {
+        background-color: #F8F9FA;
+        color: #2C3E50;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    }
+    
+    /* Sidomeny - Vit och ren */
+    section[data-testid="stSidebar"] {
+        background-color: #FFFFFF;
+        border-right: 1px solid #E9ECEF;
+    }
+    
+    /* Knappar i menyn - Stora och tydliga */
     section[data-testid="stSidebar"] .stRadio div[role='radiogroup'] > label {
-        background-color: #1c1f26; padding: 15px 20px; border-radius: 10px; margin-bottom: 8px; border-left: 5px solid #2e3036; cursor: pointer;
+        background-color: #F1F3F5;
+        padding: 15px 20px;
+        border-radius: 8px;
+        margin-bottom: 10px;
+        border-left: 5px solid #DEE2E6;
+        transition: all 0.2s;
+        cursor: pointer;
+        color: #495057;
+        font-weight: 500;
     }
+    section[data-testid="stSidebar"] .stRadio div[role='radiogroup'] > label:hover {
+        background-color: #E9ECEF;
+        border-left: 5px solid #722F37; /* Merlot-färg vid hover */
+    }
+    /* Aktivt val i menyn */
     section[data-testid="stSidebar"] .stRadio div[role='radiogroup'] > label[data-checked="true"] {
-        background-color: #5c1a22; border-left: 5px solid #e6c200; color: white;
+        background-color: #722F37;
+        border-left: 5px solid #4A1A21;
+        color: white;
+        font-weight: bold;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
-    .stButton>button { width: 100%; border-radius: 12px; height: 3em; background-color: #5c1a22; color: white; border: none; font-weight: bold; }
-    .wine-card { padding: 15px; background-color: #1c1f26; border-radius: 12px; border-left: 4px solid #5c1a22; margin-bottom: 10px; }
-    .stat-box { background-color: #1c1f26; padding: 15px; border-radius: 12px; text-align: center; }
-    .stat-num { font-size: 24px; font-weight: bold; color: #e6c200; }
+
+    /* Vanliga knappar - Merlot-färgade och lättlästa */
+    .stButton>button { 
+        width: 100%; 
+        border-radius: 8px; 
+        height: 3.5em; /* Lite högre */
+        background-color: #722F37; 
+        color: white; 
+        border: none; 
+        font-weight: 600;
+        font-size: 16px; /* Större text */
+        transition: background-color 0.2s;
+    }
+    .stButton>button:hover { 
+        background-color: #5a232b; 
+        color: white;
+    }
+    .stButton>button:active { 
+        background-color: #4a1a21; 
+    }
+
+    /* Vinkort (Cards) - Vita med skugga */
+    .wine-card { 
+        padding: 20px; 
+        background-color: #FFFFFF; 
+        border-radius: 12px; 
+        margin-bottom: 15px; 
+        border-left: 5px solid #722F37; /* Merlot-accent */
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05); /* Mjuk skugga */
+        transition: transform 0.2s;
+    }
+    .wine-card:hover {
+        transform: translateY(-2px); /* Liten lyft-effekt */
+        box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+    }
+    .wine-title {
+        font-size: 18px;
+        font-weight: bold;
+        color: #2C3E50;
+        margin-bottom: 5px;
+    }
+    .wine-info {
+        color: #6C757D;
+        font-size: 14px;
+    }
+
+    /* Statistik-boxar */
+    .stat-box { 
+        background-color: #FFFFFF; 
+        padding: 20px; 
+        border-radius: 12px; 
+        text-align: center; 
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        border: 1px solid #E9ECEF;
+    }
+    .stat-label {
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #6C757D;
+    }
+    .stat-num { 
+        font-size: 32px; 
+        font-weight: 700; 
+        color: #722F37; /* Merlot */
+        margin-top: 5px;
+    }
+    
+    /* Flikar (Tabs) */
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    .stTabs [data-baseweb="tab"] { 
+        height: 50px; 
+        background-color: #FFFFFF; 
+        border-radius: 8px; 
+        border: 1px solid #E9ECEF;
+        color: #495057;
+    }
+    .stTabs [aria-selected="true"] { 
+        background-color: #722F37; 
+        color: white; 
+        border: none;
+    }
+    
+    /* Justering av varningstexter och info */
+    .stAlert {
+        border-radius: 8px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -106,10 +218,7 @@ def save_data(df):
     try:
         sheet = client.open("Min Vinkällare").sheet1
         sheet.clear()
-        
-        # Fyll tomma värden för att undvika fel
         df_clean = df.fillna("")
-        
         data_to_write = [df_clean.columns.values.tolist()] + df_clean.values.tolist()
         sheet.update(range_name='A1', values=data_to_write)
         return True
@@ -149,19 +258,32 @@ with st.sidebar:
 # --- SIDOR ---
 if page == "Översikt":
     st.title("Översikt")
+    
+    # Använder den nya 'stat-box' designen med labels
     c1, c2 = st.columns(2)
-    with c1: st.markdown(f"<div class='stat-box'>Totalt<div class='stat-num'>{int(df['antal'].sum()) if not df.empty else 0}</div></div>", unsafe_allow_html=True)
+    with c1: 
+        st.markdown(f"""
+        <div class='stat-box'>
+            <div class='stat-label'>Totalt i lager</div>
+            <div class='stat-num'>{int(df['antal'].sum()) if not df.empty else 0} fl</div>
+        </div>
+        """, unsafe_allow_html=True)
     with c2:
         val = df['pris'].sum() if not df.empty else 0
         visnings_pris = f"{val/1000:.1f}k" if val > 10000 else f"{val:.0f}"
-        st.markdown(f"<div class='stat-box'>Värde<div class='stat-num'>{visnings_pris} kr</div></div>", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class='stat-box'>
+            <div class='stat-label'>Estimerat värde</div>
+            <div class='stat-num'>{visnings_pris} kr</div>
+        </div>
+        """, unsafe_allow_html=True)
     
     st.markdown("---")
     
     col_triv, col_btn = st.columns([3, 1])
     with col_btn:
         st.write("") 
-        ny_trivia = st.button("🔄 Ny")
+        ny_trivia = st.button("🔄 Ny Trivia")
     if 'trivia_text' not in st.session_state or ny_trivia:
         trivia_vin = df.sample(1).iloc[0] if not df.empty else None
         if trivia_vin is not None:
@@ -169,7 +291,10 @@ if page == "Översikt":
                 fakta = f"{trivia_vin['namn']} ({trivia_vin['argang']})"
                 st.session_state['trivia_text'] = get_ai_response(fakta, '', is_trivia=True)
         else: st.session_state['trivia_text'] = "Källaren verkar tom..."
-    with col_triv: st.info(f"💡 **Trivia:** {st.session_state['trivia_text']}")
+    
+    # Stylad Info-box
+    with col_triv: 
+        st.info(f"💡 **Visste du?** {st.session_state['trivia_text']}")
 
 elif page == "Vinkylen":
     st.title("🧊 mQuvée 126")
@@ -181,7 +306,14 @@ elif page == "Vinkylen":
         with st.expander(f"{hylla} ({count} st)", expanded=False):
             if viner.empty: st.caption("Tomt")
             for _, row in viner.iterrows():
-                st.markdown(f"<div class='wine-card'>🍾 <b>{row['namn']}</b><br><small>{row['argang']} | {row['antal']} st</small></div>", unsafe_allow_html=True)
+                # Ny kort-design
+                st.markdown(f"""
+                <div class='wine-card'>
+                    <div class='wine-title'>🍾 {row['namn']}</div>
+                    <div class='wine-info'>Årgång: {row['argang']} | Antal: <b>{row['antal']} st</b></div>
+                </div>
+                """, unsafe_allow_html=True)
+                
     st.subheader("Nedre Zon (16°C)")
     for i in range(1, 5): 
         hylla = f"Hylla {i}"
@@ -190,7 +322,12 @@ elif page == "Vinkylen":
         with st.expander(f"{hylla} ({count} st)", expanded=False):
             if viner.empty: st.caption("Tomt")
             for _, row in viner.iterrows():
-                st.markdown(f"<div class='wine-card'>🍷 <b>{row['namn']}</b><br><small>{row['argang']} | {row['antal']} st</small></div>", unsafe_allow_html=True)
+                st.markdown(f"""
+                <div class='wine-card'>
+                    <div class='wine-title'>🍷 {row['namn']}</div>
+                    <div class='wine-info'>Årgång: {row['argang']} | Antal: <b>{row['antal']} st</b></div>
+                </div>
+                """, unsafe_allow_html=True)
 
 elif page == "Bokhyllan":
     st.title("📚 Bokhyllan")
@@ -201,7 +338,12 @@ elif page == "Bokhyllan":
         st.subheader(f"{h} Hylla ({count})")
         if viner.empty: st.caption("Tomt")
         for _, row in viner.iterrows():
-            st.markdown(f"<div class='wine-card'><b>{row['namn']}</b> {row['argang']}</div>", unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class='wine-card'>
+                <div class='wine-title'>{row['namn']}</div>
+                <div class='wine-info'>Årgång: {row['argang']} | Antal: <b>{row['antal']} st</b></div>
+            </div>
+            """, unsafe_allow_html=True)
 
 elif page == "Lagerhantering":
     st.title("Lagerhantering")
