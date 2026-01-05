@@ -49,147 +49,57 @@ def get_google_sheet_client():
 if "GOOGLE_API_KEY" in st.secrets:
     os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
 
-# --- 3. DESIGN: MODERN SOMMELIER (LJUS & ELEGANT) ---
+# --- 3. DESIGN: MODERN SOMMELIER ---
 st.markdown("""
     <style>
-    /* Huvudbakgrund - Ljus och fräsch */
-    .stApp {
-        background-color: #F8F9FA;
-        color: #2C3E50;
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    }
+    .stApp { background-color: #F8F9FA; color: #2C3E50; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+    section[data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #E9ECEF; }
     
-    /* Sidomeny - Vit och ren */
-    section[data-testid="stSidebar"] {
-        background-color: #FFFFFF;
-        border-right: 1px solid #E9ECEF;
-    }
-    
-    /* Knappar i menyn - Stora och tydliga */
     section[data-testid="stSidebar"] .stRadio div[role='radiogroup'] > label {
-        background-color: #F1F3F5;
-        padding: 15px 20px;
-        border-radius: 8px;
-        margin-bottom: 10px;
-        border-left: 5px solid #DEE2E6;
-        transition: all 0.2s;
-        cursor: pointer;
-        color: #495057;
-        font-weight: 500;
+        background-color: #F1F3F5; padding: 15px 20px; border-radius: 8px; margin-bottom: 10px; border-left: 5px solid #DEE2E6; transition: all 0.2s; cursor: pointer; color: #495057; font-weight: 500;
     }
     section[data-testid="stSidebar"] .stRadio div[role='radiogroup'] > label:hover {
-        background-color: #E9ECEF;
-        border-left: 5px solid #722F37; /* Merlot-färg vid hover */
+        background-color: #E9ECEF; border-left: 5px solid #722F37; 
     }
-    /* Aktivt val i menyn */
     section[data-testid="stSidebar"] .stRadio div[role='radiogroup'] > label[data-checked="true"] {
-        background-color: #722F37;
-        border-left: 5px solid #4A1A21;
-        color: white;
-        font-weight: bold;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        background-color: #722F37; border-left: 5px solid #4A1A21; color: white; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
 
-    /* Vanliga knappar - Merlot-färgade och lättlästa */
-    .stButton>button { 
-        width: 100%; 
-        border-radius: 8px; 
-        height: 3.5em; /* Lite högre */
-        background-color: #722F37; 
-        color: white; 
-        border: none; 
-        font-weight: 600;
-        font-size: 16px; /* Större text */
-        transition: background-color 0.2s;
-    }
-    .stButton>button:hover { 
-        background-color: #5a232b; 
-        color: white;
-    }
-    .stButton>button:active { 
-        background-color: #4a1a21; 
-    }
+    .stButton>button { width: 100%; border-radius: 8px; height: 3.5em; background-color: #722F37; color: white; border: none; font-weight: 600; font-size: 16px; transition: background-color 0.2s; }
+    .stButton>button:hover { background-color: #5a232b; color: white; }
+    .stButton>button:active { background-color: #4a1a21; }
 
-    /* Vinkort (Cards) - Vita med skugga */
-    .wine-card { 
-        padding: 20px; 
-        background-color: #FFFFFF; 
-        border-radius: 12px; 
-        margin-bottom: 15px; 
-        border-left: 5px solid #722F37; /* Merlot-accent */
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05); /* Mjuk skugga */
-        transition: transform 0.2s;
-    }
-    .wine-card:hover {
-        transform: translateY(-2px); /* Liten lyft-effekt */
-        box-shadow: 0 6px 15px rgba(0,0,0,0.1);
-    }
-    .wine-title {
-        font-size: 18px;
-        font-weight: bold;
-        color: #2C3E50;
-        margin-bottom: 5px;
-    }
-    .wine-info {
-        color: #6C757D;
-        font-size: 14px;
-    }
+    .wine-card { padding: 20px; background-color: #FFFFFF; border-radius: 12px; margin-bottom: 15px; border-left: 5px solid #722F37; box-shadow: 0 4px 12px rgba(0,0,0,0.05); transition: transform 0.2s; }
+    .wine-card:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(0,0,0,0.1); }
+    .wine-title { font-size: 18px; font-weight: bold; color: #2C3E50; margin-bottom: 5px; }
+    .wine-info { color: #6C757D; font-size: 14px; }
 
-    /* Statistik-boxar */
-    .stat-box { 
-        background-color: #FFFFFF; 
-        padding: 20px; 
-        border-radius: 12px; 
-        text-align: center; 
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-        border: 1px solid #E9ECEF;
-    }
-    .stat-label {
-        font-size: 14px;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        color: #6C757D;
-    }
-    .stat-num { 
-        font-size: 32px; 
-        font-weight: 700; 
-        color: #722F37; /* Merlot */
-        margin-top: 5px;
-    }
+    .stat-box { background-color: #FFFFFF; padding: 20px; border-radius: 12px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #E9ECEF; }
+    .stat-label { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #6C757D; }
+    .stat-num { font-size: 32px; font-weight: 700; color: #722F37; margin-top: 5px; }
     
-    /* Flikar (Tabs) */
     .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    .stTabs [data-baseweb="tab"] { 
-        height: 50px; 
-        background-color: #FFFFFF; 
-        border-radius: 8px; 
-        border: 1px solid #E9ECEF;
-        color: #495057;
-    }
-    .stTabs [aria-selected="true"] { 
-        background-color: #722F37; 
-        color: white; 
-        border: none;
-    }
-    
-    /* Justering av varningstexter och info */
-    .stAlert {
-        border-radius: 8px;
-    }
+    .stTabs [data-baseweb="tab"] { height: 50px; background-color: #FFFFFF; border-radius: 8px; border: 1px solid #E9ECEF; color: #495057; }
+    .stTabs [aria-selected="true"] { background-color: #722F37; color: white; border: none; }
+    .stAlert { border-radius: 8px; }
     </style>
 """, unsafe_allow_html=True)
 
 # --- 4. MASTER CONTEXT ---
 MASTER_CONTEXT = """
-Du är en personlig sommelier och lagerchef. 
-Användaren gillar: Nebbiolo, Barolo, Godello. Hatar: Amarone.
-Husvin: Elio Altare Dolcetto.
-VIKTIGT: Tala alltid om var flaskan ligger (Plats och Hylla).
+Du är en objektiv, kreativ och kunnig sommelier.
+Din uppgift är att hitta den ABSOLUT BÄSTA matchningen i lagret baserat på användarens fråga.
+
+Instruktioner:
+1. Utforska hela källaren.
+2. Våga föreslå oväntade val.
+3. VIKTIGT: Tala alltid om var flaskan ligger (Plats och Hylla).
+
+Svara kort, inspirerande och hjälp användaren att hitta flaskan.
 """
 
 # --- 5. DATAFUNKTIONER ---
 def load_data():
-    """Hämtar data från Google Sheets"""
     expected_cols = ["id", "namn", "argang", "typ", "antal", "plats", "sektion", "hylla", "pris"]
     client = get_google_sheet_client()
     if not client: return pd.DataFrame(columns=expected_cols)
@@ -203,13 +113,13 @@ def load_data():
             return pd.DataFrame(columns=expected_cols)
 
         df['argang'] = df['argang'].astype(str)
+        # Säkerställ att pris är siffror för sortering/filtrering
+        df['pris'] = pd.to_numeric(df['pris'], errors='coerce').fillna(0)
         return df
     except Exception as e:
-        st.error(f"Kunde inte läsa Google Sheets: {e}")
         return pd.DataFrame(columns=expected_cols)
 
 def save_data(df):
-    """Sparar data till Google Sheets"""
     client = get_google_sheet_client()
     if not client:
         st.error("Kunde inte ansluta till Google.")
@@ -232,7 +142,8 @@ def get_ai_response(prompt, inventory_str, is_trivia=False):
         genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
         model = genai.GenerativeModel('gemini-2.5-flash')
         if is_trivia:
-            full_prompt = f"Du är ett strikt uppslagsverk om vin. Ge ENDAST intressant fakta om vinet. Inga åsikter. Max 2 meningar.\n\nVIN: {prompt}"
+            # Uppdaterad prompt för mer frihet och koppling till flaskan
+            full_prompt = f"Du är en vinkännare. Ge en intressant, fascinerande eller nördig fakta/anekdot kopplat till vinet nedan (dess druva, region eller historia). Var kreativ! Max 2 meningar.\n\nVIN: {prompt}"
         else:
             full_prompt = f"{MASTER_CONTEXT}\n\nLAGER:\n{inventory_str}\n\nFRÅGA: {prompt}"
         response = model.generate_content(full_prompt)
@@ -259,7 +170,6 @@ with st.sidebar:
 if page == "Översikt":
     st.title("Översikt")
     
-    # Använder den nya 'stat-box' designen med labels
     c1, c2 = st.columns(2)
     with c1: 
         st.markdown(f"""
@@ -280,21 +190,27 @@ if page == "Översikt":
     
     st.markdown("---")
     
+    # Trivia-sektionen
     col_triv, col_btn = st.columns([3, 1])
     with col_btn:
         st.write("") 
         ny_trivia = st.button("🔄 Ny Trivia")
-    if 'trivia_text' not in st.session_state or ny_trivia:
+    
+    if 'trivia_vin_namn' not in st.session_state or ny_trivia:
         trivia_vin = df.sample(1).iloc[0] if not df.empty else None
         if trivia_vin is not None:
+            # Spara vinet i session state så det inte byts om sidan laddas om av misstag
+            st.session_state['trivia_vin_namn'] = f"{trivia_vin['namn']} ({trivia_vin['argang']})"
             with st.spinner("Hämtar fakta..."):
-                fakta = f"{trivia_vin['namn']} ({trivia_vin['argang']})"
-                st.session_state['trivia_text'] = get_ai_response(fakta, '', is_trivia=True)
-        else: st.session_state['trivia_text'] = "Källaren verkar tom..."
+                fakta_prompt = f"{trivia_vin['namn']} {trivia_vin['argang']} från {trivia_vin['typ']}"
+                st.session_state['trivia_text'] = get_ai_response(fakta_prompt, '', is_trivia=True)
+        else: 
+            st.session_state['trivia_vin_namn'] = "Tomt i källaren"
+            st.session_state['trivia_text'] = "Lägg in viner för att få fakta!"
     
-    # Stylad Info-box
     with col_triv: 
-        st.info(f"💡 **Visste du?** {st.session_state['trivia_text']}")
+        # Här visar vi flaskans namn tydligt ovanför texten
+        st.info(f"💡 **{st.session_state['trivia_vin_namn']}**\n\n{st.session_state['trivia_text']}")
 
 elif page == "Vinkylen":
     st.title("🧊 mQuvée 126")
@@ -306,7 +222,6 @@ elif page == "Vinkylen":
         with st.expander(f"{hylla} ({count} st)", expanded=False):
             if viner.empty: st.caption("Tomt")
             for _, row in viner.iterrows():
-                # Ny kort-design
                 st.markdown(f"""
                 <div class='wine-card'>
                     <div class='wine-title'>🍾 {row['namn']}</div>
@@ -446,9 +361,38 @@ elif page == "Lagerhantering":
 
 elif page == "Sommelieren":
     st.title("Din Sommelier")
-    user_input = st.text_input("Vad vill du dricka?", placeholder="Grillat kött...")
+    
+    # --- NYA KNAPPARNA ---
+    c1, c2, c3 = st.columns(3)
+    
+    fraga = None
+
+    if c1.button("🕰️ Drickfönster"):
+        fraga = "Analysera mitt lager. Vilka flaskor börjar bli gamla eller är i sitt perfekta drickfönster nu? Ge mig en topp 3-lista som jag bör öppna snart."
+    
+    if c2.button("🎁 Gå-bort-present"):
+        fraga = "Jag ska bort på middag. Föreslå tre flaskor ur källaren att ge bort i present: en Enkel (vardag), en Mellan (helg) och en Lyxig (speciell). Motivera valen."
+    
+    if c3.button("🎲 Överraska mig!"):
+        # HÄR ÄR SPÄRREN: Välj bara viner under 800 kr för "slumpen"
+        vardagsviner = df[df['pris'] < 800]
+        
+        if not vardagsviner.empty:
+            # Välj en slumpmässig rad
+            slump_vin = vardagsviner.sample(1).iloc[0]
+            fraga = f"Jag vill bli överraskad ikväll och har plockat fram {slump_vin['namn']} ({slump_vin['argang']}). Varför är det ett kul val just nu? (Berätta också exakt var den ligger)."
+        else:
+            fraga = "Välj en slumpmässig flaska ur källaren som är drickfärdig nu."
+
+    # Manuellt inmatningsfält
+    user_input = st.text_input("Eller skriv din fråga:", placeholder="T.ex. Vad passar till asiatiskt?")
     if user_input:
-        with st.spinner("Letar i Google Sheets..."):
+        fraga = user_input
+
+    if fraga:
+        with st.spinner("Sommelieren tänker..."):
             relevant_data = df[['namn', 'argang', 'antal', 'plats', 'hylla']].to_string(index=False)
-            svar = get_ai_response(user_input, relevant_data, is_trivia=False)
+            svar = get_ai_response(fraga, relevant_data, is_trivia=False)
+            if user_input: # Visa bara frågan om man skrev den själv
+                st.markdown(f"**Fråga:** {fraga}")
             st.info(svar)
