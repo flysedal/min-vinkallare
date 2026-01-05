@@ -8,7 +8,33 @@ import json
 
 st.set_page_config(page_title="Min Vinkällare", page_icon="🍷", layout="wide")
 
-# --- KONFIGURATION & SÄKERHET ---
+# --- 1. SÄKERHET & LÖSENORD (TILLBAKA NU!) ---
+def check_password():
+    """Kollar lösenordet mot Secrets"""
+    if "password" not in st.secrets:
+        return True # Kör man lokalt utan lösenord släpps man in
+
+    def password_entered():
+        if st.session_state["password"] == st.secrets["password"]:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        st.text_input("Lösenord", type="password", on_change=password_entered, key="password")
+        return False
+    elif not st.session_state["password_correct"]:
+        st.text_input("Lösenord", type="password", on_change=password_entered, key="password")
+        st.error("😕 Fel lösenord")
+        return False
+    else:
+        return True
+
+if not check_password():
+    st.stop()
+
+# --- 2. KONFIGURATION ---
 def get_google_sheet_client():
     try:
         scope = ['https://www.googleapis.com/auth/spreadsheets']
@@ -21,7 +47,7 @@ def get_google_sheet_client():
 if "GOOGLE_API_KEY" in st.secrets:
     os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
 
-# --- DESIGN ---
+# --- 3. DESIGN ---
 st.markdown("""
     <style>
     .stApp { background-color: #0e1117; color: #fafafa; }
@@ -38,7 +64,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- MASTER CONTEXT ---
+# --- 4. MASTER CONTEXT ---
 MASTER_CONTEXT = """
 Du är en personlig sommelier och lagerchef. 
 Användaren gillar: Nebbiolo, Barolo, Godello. Hatar: Amarone.
@@ -46,50 +72,52 @@ Husvin: Elio Altare Dolcetto.
 VIKTIGT: Tala alltid om var flaskan ligger (Plats och Hylla).
 """
 
-# --- DATAFUNKTIONER ---
+# --- 5. DATAFUNKTIONER ---
 def load_data():
-    """Hämtar data från Google Sheets - MED KROCKSKYDD FÖR TOMMA ARK"""
-    # Vi definierar vilka kolumner vi FÖRVÄNTAR oss ska finnas
+    """Hämtar data från Google Sheets"""
     expected_cols = ["id", "namn", "argang", "typ", "antal", "plats", "sektion", "hylla", "pris"]
-    
     client = get_google_sheet_client()
-    if not client:
-        return pd.DataFrame(columns=expected_cols)
+    if not client: return pd.DataFrame(columns=expected_cols)
         
     try:
         sheet = client.open("Min Vinkällare").sheet1
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
         
-        # HÄR ÄR FIXEN: Om arket är tomt eller saknar kolumner -> Returnera tom mall
+        # Om tomt, returnera tom mall
         if df.empty or 'plats' not in df.columns:
             return pd.DataFrame(columns=expected_cols)
 
-        if not df.empty:
-            df['argang'] = df['argang'].astype(str)
+        df['argang'] = df['argang'].astype(str)
         return df
     except Exception as e:
-        # Om något går fel, returnera en tom lista så appen inte kraschar
+        st.error(f"Kunde inte läsa Google Sheets: {e}")
         return pd.DataFrame(columns=expected_cols)
 
 def save_data(df):
-    """Sparar data till Google Sheets"""
+    """Sparar data till Google Sheets (FIXAD FÖR IMPORT)"""
     client = get_google_sheet_client()
     if not client:
-        st.error("Kunde inte ansluta för att spara.")
-        return
+        st.error("Kunde inte ansluta till Google.")
+        return False
 
     try:
         sheet = client.open("Min Vinkällare").sheet1
         sheet.clear()
-        data_to_write = [df.columns.values.tolist()] + df.values.tolist()
+        
+        # VIKTIGT: Fyll alla tomma värden (NaN) med tom sträng ""
+        # Annars kraschar Google-kopplingen tyst
+        df_clean = df.fillna("")
+        
+        data_to_write = [df_clean.columns.values.tolist()] + df_clean.values.tolist()
         sheet.update(range_name='A1', values=data_to_write)
+        return True
     except Exception as e:
         st.error(f"Kunde inte spara till Google Sheets: {e}")
+        return False
 
 def get_ai_response(prompt, inventory_str, is_trivia=False):
-    if "GOOGLE_API_KEY" not in os.environ:
-        return "⚠️ Ingen API-nyckel konfigurerad."
+    if "GOOGLE_API_KEY" not in os.environ: return "⚠️ Ingen API-nyckel."
     try:
         genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
         model = genai.GenerativeModel('gemini-2.5-flash')
@@ -102,7 +130,7 @@ def get_ai_response(prompt, inventory_str, is_trivia=False):
     except Exception as e:
         return f"🍷 AI:n sover. (Fel: {str(e)})"
 
-# --- APP START ---
+# --- 6. APP START ---
 if 'df' not in st.session_state:
     st.session_state['df'] = load_data()
 
@@ -253,18 +281,24 @@ elif page == "Lagerhantering":
                     st.success("Borta!")
                     st.rerun()
                     
-    # KNAPPEN
     with tab_import:
         st.subheader("Importera från JSON")
         st.warning("⚠️ Detta skriver över allt i Google Sheets med innehållet i vinlagret.json!")
         if st.button("🚀 Läs in från vinlagret.json till Sheets"):
+            st.info("Läser in data från fil...")
             try:
                 with open('vinlagret.json', 'r', encoding='utf-8') as f:
                     json_data = pd.read_json(f)
-                save_data(json_data)
-                st.session_state['df'] = json_data
-                st.success(f"Succé! {len(json_data)} viner inlästa till Google Sheets.")
-                st.rerun()
+                
+                st.info(f"Hittade {len(json_data)} viner. Sparar till molnet...")
+                
+                # Här används den nya, säkrare spar-funktionen
+                if save_data(json_data):
+                    st.session_state['df'] = json_data
+                    st.success("Succé! Vinerna är uppladdade.")
+                    st.balloons()
+                else:
+                    st.error("Kunde inte spara till Google. Kolla loggarna.")
             except Exception as e:
                 st.error(f"Kunde inte importera: {e}")
 
