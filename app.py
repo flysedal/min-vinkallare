@@ -5,79 +5,49 @@ from google.oauth2.service_account import Credentials
 import os
 import google.generativeai as genai
 import time
+from datetime import datetime
 
 st.set_page_config(page_title="Min Vinkällare", page_icon="🍷", layout="wide")
 
-# --- 1. SÄKERHET & LÖSENORD (ROBUST VERSION) ---
+# --- 1. SÄKERHET ---
 def check_password():
-    """Säkerställer inloggning utan att krascha vid omladdning."""
-    if "password" not in st.secrets:
-        return True
-
-    # Om vi redan är inloggade, kör på
-    if st.session_state.get("password_correct", False):
-        return True
-
-    # Kolla om användaren skrivit in något (callback körs före denna kod)
+    if "password" not in st.secrets: return True
+    if st.session_state.get("password_correct", False): return True
     if "password_input" in st.session_state:
         if st.session_state["password_input"] == st.secrets["password"]:
             st.session_state["password_correct"] = True
-            # Rensa input för säkerhet (men krascha inte om den redan är borta)
-            del st.session_state["password_input"] 
+            del st.session_state["password_input"]
             return True
-        else:
-            st.error("😕 Fel lösenord")
-            
-    # Visa inloggningsruta
+        else: st.error("😕 Fel lösenord")
     st.text_input("Lösenord", type="password", key="password_input")
     return False
 
-if not check_password():
-    st.stop()
+if not check_password(): st.stop()
 
 # --- 2. KONFIGURATION ---
 def get_google_sheet_client():
     try:
-        scope = [
-            'https://www.googleapis.com/auth/spreadsheets',
-            'https://www.googleapis.com/auth/drive'
-        ]
+        scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
         creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
         client = gspread.authorize(creds)
         return client
-    except Exception as e:
-        return None
+    except: return None
 
 if "GOOGLE_API_KEY" in st.secrets:
     os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
 
-# --- 3. DESIGN: MODERN SOMMELIER ---
+# --- 3. DESIGN ---
 st.markdown("""
     <style>
     .stApp { background-color: #F8F9FA; color: #2C3E50; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
-    
     section[data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #E9ECEF; }
-    section[data-testid="stSidebar"] .stRadio div[role='radiogroup'] > label {
-        background-color: #F1F3F5; padding: 15px 20px; border-radius: 8px; margin-bottom: 10px; border-left: 5px solid #DEE2E6; cursor: pointer; color: #495057; font-weight: 500;
-    }
-    section[data-testid="stSidebar"] .stRadio div[role='radiogroup'] > label[data-checked="true"] {
-        background-color: #722F37; border-left: 5px solid #4A1A21; color: white; font-weight: bold;
-    }
-
-    .stButton>button { width: 100%; border-radius: 8px; height: 3.5em; background-color: #722F37; color: white; border: none; font-weight: 600; font-size: 16px; }
-    .stButton>button:hover { background-color: #5a232b; color: white; }
-    
     .wine-card { padding: 20px; background-color: #FFFFFF; border-radius: 12px; margin-bottom: 15px; border-left: 5px solid #722F37; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
     .wine-title { font-size: 18px; font-weight: bold; color: #2C3E50; margin-bottom: 5px; }
     .wine-info { color: #6C757D; font-size: 14px; }
-    
     .stat-box { background-color: #FFFFFF; padding: 20px; border-radius: 12px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border: 1px solid #E9ECEF; }
-    .stat-label { font-size: 14px; text-transform: uppercase; color: #6C757D; }
     .stat-num { font-size: 32px; font-weight: 700; color: #722F37; margin-top: 5px; }
-
-    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    .stTabs [data-baseweb="tab"] { height: 50px; background-color: #FFFFFF; border-radius: 8px; border: 1px solid #E9ECEF; color: #495057; }
-    .stTabs [aria-selected="true"] { background-color: #722F37; color: white; border: none; }
+    .stButton>button { width: 100%; border-radius: 8px; height: 3.5em; background-color: #722F37; color: white; border: none; font-weight: 600; }
+    .stButton>button:hover { background-color: #5a232b; color: white; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -94,6 +64,7 @@ Svara kort, inspirerande och hjälp användaren att hitta flaskan.
 
 # --- 5. DATAFUNKTIONER ---
 def load_data():
+    """Hämtar aktuellt lager"""
     expected_cols = ["id", "namn", "argang", "typ", "antal", "plats", "sektion", "hylla", "pris"]
     client = get_google_sheet_client()
     if not client: return pd.DataFrame(columns=expected_cols)
@@ -107,7 +78,25 @@ def load_data():
         return df
     except: return pd.DataFrame(columns=expected_cols)
 
+def load_history():
+    """Hämtar historiken"""
+    client = get_google_sheet_client()
+    if not client: return pd.DataFrame()
+    try:
+        # Försök öppna fliken 'Historik', skapa om den inte finns
+        spreadsheet = client.open("Min Vinkällare")
+        try:
+            sheet = spreadsheet.worksheet("Historik")
+        except:
+            sheet = spreadsheet.add_worksheet(title="Historik", rows="1000", cols="20")
+            sheet.append_row(["Datum", "Namn", "Årgång", "Typ", "Pris", "Kommentar"])
+        
+        data = sheet.get_all_records()
+        return pd.DataFrame(data)
+    except: return pd.DataFrame()
+
 def save_data(df):
+    """Sparar lagerlistan"""
     client = get_google_sheet_client()
     if not client: return False
     try:
@@ -118,6 +107,25 @@ def save_data(df):
         sheet.update(range_name='A1', values=data_to_write)
         return True
     except: return False
+
+def log_to_history(wine_data, comment="Drack ur"):
+    """Flyttar ett vin till historik-fliken"""
+    client = get_google_sheet_client()
+    if not client: return False
+    try:
+        spreadsheet = client.open("Min Vinkällare")
+        try:
+            sheet = spreadsheet.worksheet("Historik")
+        except:
+            sheet = spreadsheet.add_worksheet(title="Historik", rows="1000", cols="20")
+            sheet.append_row(["Datum", "Namn", "Årgång", "Typ", "Pris", "Kommentar"])
+            
+        today = datetime.now().strftime("%Y-%m-%d")
+        row = [today, wine_data['namn'], str(wine_data['argang']), wine_data['typ'], wine_data['pris'], comment]
+        sheet.append_row(row)
+        return True
+    except Exception as e:
+        return False
 
 def get_ai_response(prompt, inventory_str, is_trivia=False):
     if "GOOGLE_API_KEY" not in os.environ: return "⚠️ Ingen API-nyckel."
@@ -132,16 +140,16 @@ def get_ai_response(prompt, inventory_str, is_trivia=False):
         return response.text
     except Exception as e: return f"🍷 AI:n sover. ({str(e)})"
 
-# --- 6. APP LOGIK ---
+# --- 6. APP START ---
 if 'df' not in st.session_state:
     st.session_state['df'] = load_data()
 
 df = st.session_state['df']
 
-# Meny
 with st.sidebar:
     st.header("🍷 Vinkällaren")
-    page = st.radio("Meny", ["Översikt", "Vinkylen", "Bokhyllan", "Lagerhantering", "Sommelieren"], label_visibility="collapsed")
+    # Ny menyval: Historik
+    page = st.radio("Meny", ["Översikt", "Vinkylen", "Bokhyllan", "Lagerhantering", "Sommelieren", "📜 Historik"], label_visibility="collapsed")
     st.write("---")
     if st.button("🔄 Ladda om data"):
         st.session_state['df'] = load_data()
@@ -157,12 +165,9 @@ if page == "Översikt":
         st.markdown(f"<div class='stat-box'><div class='stat-label'>Värde</div><div class='stat-num'>{val/1000:.1f}k kr</div></div>", unsafe_allow_html=True)
     
     st.write("---")
-    
-    # Trivia (laddas bara om man vill)
     col_tr, col_btn = st.columns([3,1])
     with col_btn: 
-        if st.button("Ny Trivia"):
-             st.session_state.pop('trivia_vin_namn', None) # Tvinga ny
+        if st.button("Ny Trivia"): st.session_state.pop('trivia_vin_namn', None)
 
     if 'trivia_vin_namn' not in st.session_state:
         trivia_vin = df.sample(1).iloc[0] if not df.empty else None
@@ -180,7 +185,6 @@ if page == "Översikt":
 
 elif page == "Vinkylen":
     st.title("🧊 mQuvée 126")
-    
     st.subheader("Övre Zon (8°C)")
     for i in range(1, 4): 
         hylla = f"Hylla {i}"
@@ -212,9 +216,8 @@ elif page == "Bokhyllan":
 
 elif page == "Lagerhantering":
     st.title("Lagerhantering")
-    tab_add, tab_sort, tab_edit = st.tabs(["➕ Lägg till", "📦 Flytta/Sortera", "✏️ Ändra"])
+    tab_add, tab_sort, tab_edit = st.tabs(["➕ Lägg till", "📦 Flytta", "✏️ Ändra"])
     
-    # 1. LÄGG TILL
     with tab_add:
         st.subheader("Nytt inköp")
         with st.form("add_form"):
@@ -224,96 +227,91 @@ elif page == "Lagerhantering":
             antal = c2.number_input("Antal", 1, 100, 1)
             typ = st.selectbox("Typ", ["Rött", "Vitt", "Bubbel", "Rosé", "Sött"])
             pris = st.number_input("Pris (kr)", 0, 100000, 0)
-            
-            st.markdown("---")
             st.markdown("**Placering**")
             plats = st.selectbox("Var?", ["Vinkylen", "Bokhyllan", "Osorterat"])
-            
-            sektion = ""
-            hylla = ""
-            
+            sektion, hylla = "", ""
             if plats == "Vinkylen":
                 zon = st.radio("Zon", ["Övre (8°C)", "Nedre (16°C)"], horizontal=True)
-                if "Övre" in zon:
-                    sektion = "Övre"
-                    hylla = st.selectbox("Hylla", ["Hylla 1", "Hylla 2", "Hylla 3"])
-                else:
-                    sektion = "Nedre"
-                    hylla = st.selectbox("Hylla", ["Hylla 1", "Hylla 2", "Hylla 3", "Hylla 4"])
-            elif plats == "Bokhyllan":
-                hylla = st.selectbox("Hylla", ["Övre", "Undre"])
+                sektion = "Övre" if "Övre" in zon else "Nedre"
+                opts = ["Hylla 1", "Hylla 2", "Hylla 3"] if sektion == "Övre" else ["Hylla 1", "Hylla 2", "Hylla 3", "Hylla 4"]
+                hylla = st.selectbox("Hylla", opts)
+            elif plats == "Bokhyllan": hylla = st.selectbox("Hylla", ["Övre", "Undre"])
             
             if st.form_submit_button("Spara Vin"):
                 if namn:
                     new_id = df['id'].max() + 1 if not df.empty else 1
-                    new_row = {"id": new_id, "namn": namn, "argang": arg, "typ": typ, "antal": antal, 
-                               "plats": plats, "sektion": sektion, "hylla": hylla, "pris": pris}
+                    new_row = {"id": new_id, "namn": namn, "argang": arg, "typ": typ, "antal": antal, "plats": plats, "sektion": sektion, "hylla": hylla, "pris": pris}
                     df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
                     st.session_state['df'] = df
                     if save_data(df):
                         st.success(f"✅ Sparat! **{namn}** ligger nu på **{plats} {hylla}**")
-                        time.sleep(1) # Ge användaren tid att se
+                        time.sleep(1.5)
                         st.rerun()
-                else:
-                    st.error("Skriv ett namn!")
+                else: st.error("Skriv ett namn!")
 
-    # 2. FLYTTA
     with tab_sort:
         st.subheader("Flytta flaskor")
-        # Lista alla viner
         sok = st.selectbox("Välj vin att flytta:", df.apply(lambda x: f"{x['namn']} {x['argang']} ({x['plats']}) ID:{x['id']}", axis=1))
-        
         if sok:
             valt_id = int(sok.split("ID:")[1])
-            vin_data = df[df['id'] == valt_id].iloc[0]
-            
-            st.info(f"Nuvarande: {vin_data['plats']} - {vin_data['hylla']}")
-            
             with st.form("move_form"):
                 ny_plats = st.selectbox("Ny Plats", ["Vinkylen", "Bokhyllan", "Annat"])
-                ny_sektion = ""
-                ny_hylla = ""
-                
+                ny_sektion, ny_hylla = "", ""
                 if ny_plats == "Vinkylen":
-                    ny_zon = st.radio("Zon", ["Övre", "Nedre"], horizontal=True, key="move_zone")
+                    ny_zon = st.radio("Zon", ["Övre", "Nedre"], horizontal=True, key="m_zon")
                     ny_sektion = "Övre" if ny_zon == "Övre" else "Nedre"
-                    opts = ["Hylla 1", "Hylla 2", "Hylla 3"] if ny_zon == "Övre" else ["Hylla 1", "Hylla 2", "Hylla 3", "Hylla 4"]
+                    opts = ["Hylla 1", "Hylla 2", "Hylla 3"] if ny_sektion == "Övre" else ["Hylla 1", "Hylla 2", "Hylla 3", "Hylla 4"]
                     ny_hylla = st.selectbox("Ny Hylla", opts)
-                elif ny_plats == "Bokhyllan":
-                    ny_hylla = st.selectbox("Ny Hylla", ["Övre", "Undre"])
-                else:
-                    ny_hylla = st.text_input("Beskrivning", "Köksbänken")
+                elif ny_plats == "Bokhyllan": ny_hylla = st.selectbox("Ny Hylla", ["Övre", "Undre"])
+                else: ny_hylla = st.text_input("Beskrivning", "Köksbänken")
 
                 if st.form_submit_button("Flytta"):
                     df.loc[df['id'] == valt_id, ['plats', 'sektion', 'hylla']] = [ny_plats, ny_sektion, ny_hylla]
-                    st.session_state['df'] = df
                     save_data(df)
                     st.success(f"✅ Flyttad! Ligger nu på **{ny_plats} {ny_hylla}**")
-                    time.sleep(1)
+                    time.sleep(1.5)
                     st.rerun()
 
-    # 3. ÄNDRA
     with tab_edit:
-        st.write("Redigera antal eller ta bort")
+        st.subheader("Hantera flaska")
         sok_edit = st.selectbox("Välj vin:", df.apply(lambda x: f"{x['namn']} {x['argang']} ID:{x['id']}", axis=1), key="edit_sel")
         if sok_edit:
             eid = int(sok_edit.split("ID:")[1])
             idx = df[df['id'] == eid].index[0]
+            vin_data = df.loc[idx]
+            
+            st.info(f"**{vin_data['namn']}** (Nuvarande antal: {vin_data['antal']})")
             
             c1, c2 = st.columns(2)
-            nytt_antal = c1.number_input("Antal", 0, 100, int(df.at[idx, 'antal']))
             
-            if c1.button("Uppdatera antal"):
-                df.at[idx, 'antal'] = nytt_antal
-                save_data(df)
-                st.success("✅ Antal uppdaterat!")
-                st.rerun()
-                
-            if c2.button("🗑️ TA BORT VIN", type="primary"):
+            # Alternativ 1: Drick ur (Logga till historik)
+            if c1.button("🥂 Drack ur (Spara i historik)", type="primary"):
+                # Logga först
+                log_to_history(vin_data, comment="Drack ur")
+                # Ta bort från listan
                 df = df.drop(idx)
                 save_data(df)
-                st.warning("🗑️ Vinet raderat.")
+                st.success(f"✅ Skål! **{vin_data['namn']}** är flyttad till historiken.")
+                time.sleep(2)
                 st.rerun()
+
+            # Alternativ 2: Ändra antal (Ingen historik, bara justering)
+            with c2.popover("⚙️ Ändra antal / Rensa"):
+                nytt_antal = st.number_input("Nytt antal", 0, 100, int(vin_data['antal']))
+                if st.button("Uppdatera"):
+                    df.at[idx, 'antal'] = nytt_antal
+                    save_data(df)
+                    st.success("✅ Antal uppdaterat!")
+                    time.sleep(1)
+                    st.rerun()
+                
+                st.write("---")
+                if st.button("🗑️ Radera helt (Ingen historik)"):
+                    df = df.drop(idx)
+                    save_data(df)
+                    st.success("✅ Vinet raderat permanent.")
+                    time.sleep(1.5)
+                    st.rerun()
 
 elif page == "Sommelieren":
     st.title("Din Sommelier")
@@ -322,11 +320,30 @@ elif page == "Sommelieren":
     if c1.button("🕰️ Drickfönster"): fraga = "Vilka flaskor börjar bli gamla? Ge mig topp 3 att dricka nu."
     if c2.button("🎁 Gåva"): fraga = "Föreslå tre gå-bort-viner: Budget, Mellan, Lyx."
     if c3.button("🎲 Överraska"): fraga = "Välj en slumpmässig flaska (max 800kr) och sälj in den!"
-    
     inp = st.text_input("Din fråga:", placeholder="Vad passar till pizza?")
     if inp: fraga = inp
-    
     if fraga:
         with st.spinner("Sommelieren tänker..."):
             data = df[['namn', 'argang', 'antal', 'plats', 'sektion', 'hylla']].to_string(index=False)
             st.info(get_ai_response(fraga, data))
+
+# --- NY SIDA: HISTORIK ---
+elif page == "📜 Historik":
+    st.title("📜 Drinkhistorik")
+    df_hist = load_history()
+    
+    if df_hist.empty:
+        st.info("Ingen historik än. Drick lite vin! 🍷")
+    else:
+        # Visa snygg tabell, sortera så senaste hamnar överst om datum finns
+        try:
+            df_hist = df_hist.sort_values(by="Datum", ascending=False)
+        except: pass
+        
+        for _, row in df_hist.iterrows():
+            st.markdown(f"""
+            <div class='wine-card' style='border-left: 5px solid #6C757D;'>
+                <div class='wine-title' style='color:#6C757D;'>🍾 {row['Namn']} <span style='font-size:0.8em; font-weight:normal;'>({row['Årgång']})</span></div>
+                <div class='wine-info'>Drucket: <b>{row['Datum']}</b> | Pris: {row['Pris']} kr</div>
+            </div>
+            """, unsafe_allow_html=True)
